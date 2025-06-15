@@ -87,7 +87,7 @@ class DriverRecommendationGUI:
             root: Tkinter root window
         """
         self.root = root
-        self.root.title("Driver Recommendation System")
+        self.root.title("Driver Recommendation Gameeeeeeeeeeeee")
         self.root.geometry("1200x800")
         
         self.db_manager = DatabaseManager()
@@ -368,7 +368,7 @@ class DriverRecommendationGUI:
         def calculate_thread():
             try:
                 # Get top drivers
-                top_drivers = self.recommendation_engine.get_top_drivers(destinations, top_n=10)
+                top_drivers = self.recommendation_engine.get_top_drivers(destinations, top_n=30)
                 
                 if not top_drivers:
                     self.root.after(0, lambda: messagebox.showerror("Error", "No driver recommendations found. Please check your data."))
@@ -400,31 +400,37 @@ class DriverRecommendationGUI:
         result += f"\n"
         
         # Top drivers ranking
-        result += f"🏆 TOP {len(top_drivers)} DRIVERS RANKING:\n"
+        result += f"🏆 TOP {len(top_drivers)} DRIVERS RANKING (Based on Actual Experience):\n"
         result += f"{'='*80}\n"
         
         for driver_info in top_drivers:
+            visited = driver_info['destinations_visited']
+            total_dest = driver_info['destinations_count']
+            total_trips = driver_info['total_trips']
+            
             result += f"\n📍 RANK #{driver_info['rank']}: {driver_info['driver']}\n"
             result += f"{'─'*60}\n"
-            result += f"📊 Total Score: {driver_info['total_score']:.1f} | "
-            result += f"Average Score: {driver_info['average_score']:.1f}\n"
+            result += f"📊 Destinations Visited: {visited}/{total_dest} | Total Trips: {total_trips}\n"
             
             stats = driver_info['stats']
             if stats:
-                result += f"📈 Experience: {stats['total_trips']} trips, "
+                result += f"📈 Overall Experience: {stats['total_trips']} trips, "
                 result += f"{stats['unique_locations']} locations, "
                 result += f"{stats['provinces_covered']} provinces\n"
             
-            result += f"\n💡 Route Details:\n"
+            result += f"\n💡 Route Experience Details:\n"
             for detail in driver_info['route_details']:
-                result += f"   🎯 {detail['destination']}"
+                status_icon = "✅" if detail['visited'] else "❌"
+                result += f"   {status_icon} {detail['destination']}"
                 if detail['province']:
                     result += f" ({detail['province']})"
-                result += f" - Score: {detail['score']:.1f}\n"
                 
-                for explanation in detail['explanations']:
-                    result += f"      • {explanation}\n"
-                result += f"\n"
+                if detail['visited']:
+                    result += f" - เคยไป {detail['trip_count']} ครั้ง\n"
+                else:
+                    result += f" - ไม่เคยไป\n"
+            
+            result += f"\n"
         
         return result
     

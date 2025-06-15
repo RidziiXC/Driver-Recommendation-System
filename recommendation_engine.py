@@ -50,82 +50,52 @@ class RecommendationEngine:
     
     def calculate_route_score(self, destinations):
         """
-        Calculate compatibility score for multiple destinations (1-4 locations)
+        Calculate actual trip counts for multiple destinations (1-4 locations)
         
         Args:
             destinations: List of dict [{'name': str, 'province': str}, ...]
             
         Returns:
-            dict: Driver scores with explanations
+            dict: Driver trip counts with details
         """
         if not destinations or len(destinations) > 4:
             raise ValueError("Destinations must be 1-4 locations")
         
-        scores = {}
+        results = {}
         
         for driver in self.experience_matrix.keys():
-            total_score = 0
-            explanations = []
             route_details = []
+            total_trips = 0
+            destinations_visited = 0
             
             for i, dest in enumerate(destinations, 1):
                 dest_name = dest['name']
                 dest_province = dest.get('province', '')
                 
-                # Calculate score for this destination
-                dest_score = 0
-                dest_explanations = []
+                # Get actual trip count for this destination
+                trip_count = self.experience_matrix[driver].get(dest_name, 0)
                 
-                # 1. Direct experience (40% weight)
-                direct_exp = self.experience_matrix[driver].get(dest_name, 0)
-                if direct_exp > 0:
-                    points = min(direct_exp * 10, 40)
-                    dest_score += points
-                    dest_explanations.append(f"เคยไป {dest_name} จำนวน {direct_exp} ครั้ง ({points} คะแนน)")
-                
-                # 2. Province experience (30% weight)
-                if dest_province:
-                    province_exp = self.province_experience[driver].get(dest_province, 0)
-                    if province_exp > 0:
-                        points = min(province_exp * 3, 30)
-                        dest_score += points
-                        dest_explanations.append(f"มีประสบการณ์ในจังหวัด {dest_province} จำนวน {province_exp} ครั้ง ({points} คะแนน)")
-                
-                # 3. Similar locations (20% weight)
-                similar_locations = self._find_similar_locations(dest_name, driver)
-                if similar_locations:
-                    points = min(len(similar_locations) * 4, 20)
-                    dest_score += points
-                    dest_explanations.append(f"เคยไปสถานที่คล้ายกัน {len(similar_locations)} แห่ง ({points} คะแนน)")
-                
-                # 4. Overall experience (10% weight)
-                if driver in self.drivers_stats:
-                    total_exp = self.drivers_stats[driver]['total_trips']
-                    points = min(total_exp * 0.5, 10)
-                    dest_score += points
-                    if i == 1:  # Only add this explanation once
-                        dest_explanations.append(f"ประสบการณ์รวม {total_exp} เที่ยว ({points} คะแนน)")
-                
-                total_score += dest_score
                 route_details.append({
                     'destination': dest_name,
                     'province': dest_province,
-                    'score': round(dest_score, 2),
-                    'explanations': dest_explanations
+                    'trip_count': trip_count,
+                    'visited': trip_count > 0
                 })
+                
+                total_trips += trip_count
+                if trip_count > 0:
+                    destinations_visited += 1
             
-            # Calculate average score for the route
-            avg_score = total_score / len(destinations)
-            
-            scores[driver] = {
-                'total_score': round(total_score, 2),
-                'average_score': round(avg_score, 2),
+            results[driver] = {
+                'total_trips': total_trips,
+                'destinations_visited': destinations_visited,
+                'destinations_count': len(destinations),
+                'completion_ratio': destinations_visited / len(destinations),
                 'route_details': route_details,
-                'stats': self.drivers_stats.get(driver, {}),
-                'destinations_count': len(destinations)
+                'stats': self.drivers_stats.get(driver, {})
             }
         
-        return scores
+        return results
     
     def _find_similar_locations(self, destination, driver):
         """Find similar locations that driver has been to"""
@@ -143,21 +113,32 @@ class RecommendationEngine:
         
         return similar[:5]
     
-    def get_top_drivers(self, destinations, top_n=10):
+    def get_top_drivers(self, destinations, top_n=30):
         """
-        Get top N drivers for the route
+        Get top N drivers for the route based on actual trip counts
         
         Args:
             destinations: List of destinations
-            top_n: Number of top drivers to return
+            top_n: Number of top drivers to return (default 30)
             
         Returns:
-            list: Top drivers with rankings
+            list: Top drivers with rankings based on actual experience
         """
-        scores = self.calculate_route_score(destinations)
+        results = self.calculate_route_score(destinations)
         
-        # Sort by average score
-        sorted_drivers = sorted(scores.items(), key=lambda x: x[1]['average_score'], reverse=True)
+        # Sort by:
+        # 1. Number of destinations visited (descending)
+        # 2. Total trips to those destinations (descending)
+        # 3. Driver name (ascending) for ties
+        sorted_drivers = sorted(
+            results.items(), 
+            key=lambda x: (
+                x[1]['destinations_visited'],      # Primary: destinations visited
+                x[1]['total_trips'],               # Secondary: total trips
+                -ord(x[0][0])                     # Tertiary: driver name (reverse alphabetical)
+            ), 
+            reverse=True
+        )
         
         # Return top N
         top_drivers = []
@@ -165,11 +146,12 @@ class RecommendationEngine:
             top_drivers.append({
                 'rank': i,
                 'driver': driver,
-                'total_score': data['total_score'],
-                'average_score': data['average_score'],
+                'destinations_visited': data['destinations_visited'],
+                'total_trips': data['total_trips'],
+                'destinations_count': data['destinations_count'],
+                'completion_ratio': data['completion_ratio'],
                 'route_details': data['route_details'],
-                'stats': data['stats'],
-                'destinations_count': data['destinations_count']
+                'stats': data['stats']
             })
         
         return top_drivers
